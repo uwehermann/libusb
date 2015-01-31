@@ -4,6 +4,7 @@
  * Copyright © 2007-2008 Daniel Drake <dsd@gentoo.org>
  * Copyright © 2012 Pete Batard <pete@akeo.ie>
  * Copyright © 2012 Nathan Hjelm <hjelmn@cs.unm.edu>
+ * Copyright © 2015 Chris Dickens <christopher.a.dickens@gmail.com>
  * For more information, please visit: http://libusb.info
  *
  * This library is free software; you can redistribute it and/or
@@ -1818,42 +1819,62 @@ int LIBUSB_CALL libusb_get_next_timeout(libusb_context *ctx,
 	struct timeval *tv);
 
 /** \ingroup poll
- * File descriptor for polling
+ * Native OS handle for system resources
+ *
+ * Since version 1.0.20, \ref LIBUSB_API_VERSION >= 0x01000104
+ *
+ * Unix and Windows operating systems have different concepts of what
+ * data type represents a handle to some system resource. Unix-like
+ * systems use a file descriptor. Windows systems use an opaque type called a HANDLE.
+ *
+ * For cross-platform compatibility, libusb will abstract this difference
+ * into a libusb_os_handle data type. You can use this type in the
+ * functions that your operating system provides to monitor resources
+ * for activity (poll() for Unix-like systems, Wait family of functions on Windows).
+ */
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(_WIN32_WCE)
+typedef HANDLE libusb_os_handle;
+#else
+typedef int libusb_os_handle;
+#endif
+
+/** \ingroup poll
+ * OS handle for event polling
  */
 struct libusb_pollfd {
-	/** Numeric file descriptor */
-	int fd;
+	/** Native OS resource handle */
+	libusb_os_handle fd;
 
 	/** Event flags to poll for from <poll.h>. POLLIN indicates that you
 	 * should monitor this file descriptor for becoming ready to read from,
 	 * and POLLOUT indicates that you should monitor this file descriptor for
-	 * nonblocking write readiness. */
+	 * nonblocking write readiness. This field should be ignored on Windows. */
 	short events;
 };
 
 /** \ingroup poll
- * Callback function, invoked when a new file descriptor should be added
- * to the set of file descriptors monitored for events.
- * \param fd the new file descriptor
+ * Callback function, invoked when a new OS handle should be added
+ * to the set of OS handles monitored for events.
+ * \param handle the new OS resource handle
  * \param events events to monitor for, see \ref libusb_pollfd for a
  * description
  * \param user_data User data pointer specified in
  * libusb_set_pollfd_notifiers() call
  * \see libusb_set_pollfd_notifiers()
  */
-typedef void (LIBUSB_CALL *libusb_pollfd_added_cb)(int fd, short events,
+typedef void (LIBUSB_CALL *libusb_pollfd_added_cb)(libusb_os_handle handle, short events,
 	void *user_data);
 
 /** \ingroup poll
- * Callback function, invoked when a file descriptor should be removed from
- * the set of file descriptors being monitored for events. After returning
- * from this callback, do not use that file descriptor again.
- * \param fd the file descriptor to stop monitoring
+ * Callback function, invoked when an OS handle should be removed from
+ * the set of OS handles monitored for events. After returning
+ * from this callback, do not use that OS handle again.
+ * \param handle the OS resource handle to stop monitoring
  * \param user_data User data pointer specified in
  * libusb_set_pollfd_notifiers() call
  * \see libusb_set_pollfd_notifiers()
  */
-typedef void (LIBUSB_CALL *libusb_pollfd_removed_cb)(int fd, void *user_data);
+typedef void (LIBUSB_CALL *libusb_pollfd_removed_cb)(libusb_os_handle handle, void *user_data);
 
 const struct libusb_pollfd ** LIBUSB_CALL libusb_get_pollfds(
 	libusb_context *ctx);
