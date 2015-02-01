@@ -11,12 +11,14 @@
 typedef int usbi_event_t;
 
 #define USBI_EVENT_GET_SOURCE(event)	(event)
+#define USBI_INVALID_EVENT		-1
 #else
 typedef struct {
         int fd[2];
 } usbi_event_t;
 
 #define USBI_EVENT_GET_SOURCE(event)	((event).fd[0])
+#define USBI_INVALID_EVENT		{ { -1, -1 } }
 #endif
 
 typedef int usbi_timer_t;
