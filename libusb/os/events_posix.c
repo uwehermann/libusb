@@ -20,46 +20,170 @@
 
 #include <config.h>
 
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#ifdef USBI_USING_TIMERFD
+#include <sys/timerfd.h>
+#endif
+
 #include "libusbi.h"
 
 int usbi_create_event(usbi_event_t *event)
 {
-	return LIBUSB_ERROR_NOT_SUPPORTED;
+	int r = pipe(event->fd);
+	if (r == -1) {
+		usbi_warn(NULL, "failed to create internal pipe: %d", errno);
+		return LIBUSB_ERROR_OTHER;
+	}
+	r = fcntl(event->fd[1], F_GETFL);
+	if (r == -1) {
+		usbi_warn(NULL, "failed to get pipe fd flags: %d", errno);
+		goto err_close_pipe;
+	}
+	r = fcntl(event->fd[1], F_SETFL, r | O_NONBLOCK);
+	if (r == -1) {
+		usbi_warn(NULL, "failed to set non-blocking write on new pipe: %d", errno);
+		goto err_close_pipe;
+	}
+
+	return 0;
+
+err_close_pipe:
+	close(event->fd[0]);
+	close(event->fd[1]);
+	return LIBUSB_ERROR_OTHER;;
 }
 
 int usbi_signal_event(usbi_event_t *event)
 {
-	return LIBUSB_ERROR_NOT_SUPPORTED;
+	unsigned char dummy = 1;
+	ssize_t r;
+
+	r = write(event->fd[1], &dummy, sizeof(dummy));
+	if (r == -1) {
+		usbi_warn(NULL, "internal signalling write failed: %d", errno);
+		return LIBUSB_ERROR_IO;
+	}
+
+	return 0;
 }
 
 int usbi_clear_event(usbi_event_t *event)
 {
-	return LIBUSB_ERROR_NOT_SUPPORTED;
+	unsigned char dummy;
+	ssize_t r;
+
+	r = read(event->fd[0], &dummy, sizeof(dummy));
+	if (r == -1) {
+		usbi_warn(NULL, "internal signalling read failed: %d", errno);
+		return LIBUSB_ERROR_IO;
+	}
+
+	return 0;
 }
 
 int usbi_destroy_event(usbi_event_t *event)
 {
-	return LIBUSB_ERROR_NOT_SUPPORTED;
+	int r1, r2;
+
+	r1 = close(event->fd[0]);
+	if (r1 == -1)
+		usbi_warn(NULL, "internal pipe close (read) failed: %d", errno);
+
+	r2 = close(event->fd[1]);
+	if (r2 == -1)
+		usbi_warn(NULL, "internal pipe close (write) failed: %d", errno);
+
+	if (r1 == -1 || r2 == -1)
+		return LIBUSB_ERROR_OTHER;
+
+	return 0;
 }
 
 usbi_timer_t usbi_create_timer(void)
 {
+#ifdef USBI_USING_TIMERFD
+	static clockid_t clockid = -1;
+	int timerfd;
+
+	if (clockid == -1) {
+#ifdef CLOCK_MONOTONIC
+		struct timespec ts;
+		int r;
+
+		r = clock_gettime(CLOCK_MONOTONIC, &ts);
+		if (r == 0)
+		{
+			clockid = CLOCK_MONOTONIC;
+		}
+		else
+#endif
+		{
+			clockid = CLOCK_REALTIME;
+		}
+	}
+
+	timerfd = timerfd_create(clockid, TFD_NONBLOCK);
+	if (timerfd == -1) {
+		usbi_warn(NULL, "failed to create timerfd: %d", errno);
+		return USBI_INVALID_TIMER;
+	}
+
+	return timerfd;
+#else
 	return USBI_INVALID_TIMER;
+#endif
 }
 
 int usbi_arm_timer(usbi_timer_t timer, struct timeval *tv)
 {
+#ifdef USBI_USING_TIMERFD
+	int r;
+	const struct itimerspec it = { { 0, 0 },
+		{ tv->tv_sec, (tv->tv_usec * 1000) } };
+	r = timerfd_settime(timer, 0, &it, NULL);
+	if (r == -1) {
+		usbi_warn(NULL, "failed to arm timerfd: %d", errno);
+		return LIBUSB_ERROR_OTHER;
+	}
+
+	return 0;
+#else
 	return LIBUSB_ERROR_NOT_SUPPORTED;
+#endif
 }
 
 int usbi_disarm_timer(usbi_timer_t timer)
 {
+#ifdef USBI_USING_TIMERFD
+	int r;
+	const struct itimerspec disarm_timer = { { 0, 0 }, { 0, 0 } };
+	r = timerfd_settime(timer, 0, &disarm_timer, NULL);
+	if (r == -1) {
+		usbi_warn(NULL, "failed to disarm timerfd: %d", errno);
+		return LIBUSB_ERROR_OTHER;
+	}
+
+	return 0;
+#else
 	return LIBUSB_ERROR_NOT_SUPPORTED;
+#endif
 }
 
 int usbi_destroy_timer(usbi_timer_t timer)
 {
+#ifdef USBI_USING_TIMERFD
+	int r = close(timer);
+	if (r == -1) {
+		usbi_warn(NULL, "failed to close timerfd: %d", errno);
+		return LIBUSB_ERROR_OTHER;
+	}
+
+	return 0;
+#else
 	return LIBUSB_ERROR_NOT_SUPPORTED;
+#endif
 }
 
 int usbi_alloc_event_data(struct libusb_context *ctx)
