@@ -186,6 +186,34 @@ if test "$platform" = posix; then
 		[#include <poll.h>])
 fi
 
+# eventfd
+AC_CHECK_HEADER([sys/eventfd.h], [eventfd_h=1], [eventfd_h=0])
+AC_ARG_ENABLE([eventfd],
+	[AS_HELP_STRING([--enable-eventfd],
+		[use eventfd for event signalling [default=auto]])],
+	[use_eventfd=$enableval], [use_eventfd='auto'])
+
+if test "x$use_eventfd" = "xyes" -a "x$eventfd_h" = "x0"; then
+	AC_MSG_ERROR([eventfd header not available; glibc 2.9+ required])
+fi
+
+AC_CHECK_DECL([EFD_NONBLOCK], [efd_hdr_ok=yes], [efd_hdr_ok=no], [#include <sys/eventfd.h>])
+if test "x$use_eventfd" = "xyes" -a "x$efd_hdr_ok" = "xno"; then
+	AC_MSG_ERROR([eventfd header not usable; glibc 2.9+ required])
+fi
+
+AC_MSG_CHECKING([whether to use eventfd for signalling])
+if test "x$use_eventfd" = "xno"; then
+	AC_MSG_RESULT([no (disabled by user)])
+else
+	if test "x$eventfd_h" = "x1" -a "x$efd_hdr_ok" = "xyes"; then
+		AC_MSG_RESULT([yes])
+		AC_DEFINE(USBI_USING_EVENTFD, 1, [eventfd available and enabled])
+	else
+		AC_MSG_RESULT([no (header not available)])
+	fi
+fi
+
 # timerfd
 AC_CHECK_HEADER([sys/timerfd.h], [timerfd_h=1], [timerfd_h=0])
 AC_ARG_ENABLE([timerfd],

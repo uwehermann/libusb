@@ -23,15 +23,39 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+#ifdef USBI_USING_EVENTFD
+#include <sys/eventfd.h>
+#endif
 #ifdef USBI_USING_TIMERFD
 #include <sys/timerfd.h>
 #endif
 
 #include "libusbi.h"
 
+#ifdef USBI_USING_EVENTFD
+#define EVENT_READ_FD(event)	(*(event))
+#define EVENT_WRITE_FD(event)	(*(event))
+#else
+#define EVENT_READ_FD(event)	((event)->fd[0])
+#define EVENT_WRITE_FD(event)	((event)->fd[1])
+#endif
+
+
 int usbi_create_event(usbi_event_t *event)
 {
-	int r = pipe(event->fd);
+	int r;
+
+#ifdef USBI_USING_EVENTFD
+	r = eventfd(0, EFD_NONBLOCK);
+	if (r == -1) {
+		usbi_warn(NULL, "failed to create eventfd: %d", errno);
+		return LIBUSB_ERROR_OTHER;
+	}
+
+	*event = r;
+	return 0;
+#else
+	r = pipe(event->fd);
 	if (r == -1) {
 		usbi_warn(NULL, "failed to create internal pipe: %d", errno);
 		return LIBUSB_ERROR_OTHER;
@@ -53,14 +77,15 @@ err_close_pipe:
 	close(event->fd[0]);
 	close(event->fd[1]);
 	return LIBUSB_ERROR_OTHER;;
+#endif
 }
 
 int usbi_signal_event(usbi_event_t *event)
 {
-	unsigned char dummy = 1;
+	uint64_t dummy = 1;
 	ssize_t r;
 
-	r = write(event->fd[1], &dummy, sizeof(dummy));
+	r = write(EVENT_WRITE_FD(event), &dummy, sizeof(dummy));
 	if (r == -1) {
 		usbi_warn(NULL, "internal signalling write failed: %d", errno);
 		return LIBUSB_ERROR_IO;
@@ -71,10 +96,10 @@ int usbi_signal_event(usbi_event_t *event)
 
 int usbi_clear_event(usbi_event_t *event)
 {
-	unsigned char dummy;
+	uint64_t dummy;
 	ssize_t r;
 
-	r = read(event->fd[0], &dummy, sizeof(dummy));
+	r = read(EVENT_READ_FD(event), &dummy, sizeof(dummy));
 	if (r == -1) {
 		usbi_warn(NULL, "internal signalling read failed: %d", errno);
 		return LIBUSB_ERROR_IO;
@@ -85,6 +110,13 @@ int usbi_clear_event(usbi_event_t *event)
 
 int usbi_destroy_event(usbi_event_t *event)
 {
+#ifdef USBI_USING_EVENTFD
+	int r = close(*event);
+	if (r == -1) {
+		usbi_warn(NULL, "failed to close eventfd: %d", errno);
+		return LIBUSB_ERROR_OTHER;
+	}
+#else
 	int r1, r2;
 
 	r1 = close(event->fd[0]);
@@ -97,6 +129,7 @@ int usbi_destroy_event(usbi_event_t *event)
 
 	if (r1 == -1 || r2 == -1)
 		return LIBUSB_ERROR_OTHER;
+#endif
 
 	return 0;
 }
