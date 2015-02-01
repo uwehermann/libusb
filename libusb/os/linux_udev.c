@@ -95,7 +95,7 @@ int linux_udev_start_event_monitor(void)
 		goto err_free_monitor;
 	}
 
-	r = usbi_pipe(udev_control_pipe);
+	r = pipe(udev_control_pipe);
 	if (r) {
 		usbi_err(NULL, "could not create udev control pipe");
 		goto err_free_monitor;
@@ -134,7 +134,7 @@ int linux_udev_stop_event_monitor(void)
 
 	/* Write some dummy data to the control pipe and
 	 * wait for the thread to exit */
-	r = usbi_write(udev_control_pipe[1], &dummy, sizeof(dummy));
+	r = write(udev_control_pipe[1], &dummy, sizeof(dummy));
 	if (r <= 0) {
 		usbi_warn(NULL, "udev control pipe signal failed");
 	}
@@ -175,7 +175,7 @@ static void *linux_udev_event_thread_main(void *arg)
 	while (poll(fds, 2, -1) >= 0) {
 		if (fds[0].revents & POLLIN) {
 			/* activity on control pipe, read the byte and exit */
-			r = usbi_read(udev_control_pipe[0], &dummy, sizeof(dummy));
+			r = read(udev_control_pipe[0], &dummy, sizeof(dummy));
 			if (r <= 0) {
 				usbi_warn(NULL, "udev control pipe read failed");
 			}

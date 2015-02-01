@@ -60,40 +60,40 @@ case $host in
 *-linux* | *-uclinux*)
 	AC_MSG_RESULT([Linux])
 	backend="linux"
-	threads="posix"
+	platform="posix"
 	;;
 *-darwin*)
 	AC_MSG_RESULT([Darwin/Mac OS X])
 	backend="darwin"
-	threads="posix"
+	platform="posix"
 	;;
 *-openbsd*)
 	AC_MSG_RESULT([OpenBSD])
 	backend="openbsd"
-	threads="posix"
+	platform="posix"
 	;;
 *-netbsd*)
 	AC_MSG_RESULT([NetBSD])
 	backend="netbsd"
-	threads="posix"
+	platform="posix"
 	;;
 *-mingw*)
 	AC_MSG_RESULT([Windows])
 	backend="windows"
-	threads="windows"
+	platform="windows"
 	create_import_lib="yes"
 	AM_CFLAGS="${AM_CFLAGS} -fno-omit-frame-pointer"
 	;;
 *-cygwin*)
 	AC_MSG_RESULT([Cygwin (using Windows backend)])
 	backend="windows"
-	threads="posix"
+	platform="windows"
 	;;
 *-haiku*)
 	AC_MSG_RESULT([Haiku])
 	AC_CONFIG_SUBDIRS([libusb/os/haiku])
 	backend="haiku"
-	threads="posix"
+	platform="posix"
 	;;
 *)
 	AC_MSG_ERROR([unsupported operating system])
@@ -134,51 +134,36 @@ yes)
 	THREAD_CFLAGS="-pthread"
 	LIBS="${LIBS} -pthread"
 esac
-
-	AC_CHECK_HEADERS([poll.h])
-	AC_DEFINE([POLL_NFDS_TYPE],[nfds_t],[type of second poll() argument])
 	;;
 darwin)
 	AC_DEFINE(OS_DARWIN, 1, [Darwin backend])
 	AC_SUBST(OS_DARWIN)
 	LIBS="-lobjc -Wl,-framework,IOKit -Wl,-framework,CoreFoundation"
 	LTLDFLAGS="${LTLDFLAGS} -Wl,-prebind"
-	AC_CHECK_HEADERS([poll.h])
-	AC_CHECK_TYPE([nfds_t],
-		[AC_DEFINE([POLL_NFDS_TYPE],[nfds_t],[type of second poll() argument])],
-		[AC_DEFINE([POLL_NFDS_TYPE],[unsigned int],[type of second poll() argument])],
-		[#include <poll.h>])
 	;;
 openbsd)
 	AC_DEFINE(OS_OPENBSD, 1, [OpenBSD backend])
 	AC_SUBST(OS_OPENBSD)
 	THREAD_CFLAGS="-pthread"
 	LIBS="-pthread"
-	AC_CHECK_HEADERS([poll.h])
-	AC_DEFINE([POLL_NFDS_TYPE],[nfds_t],[type of second poll() argument])
 	;;
 netbsd)
 	AC_DEFINE(OS_NETBSD, 1, [NetBSD backend])
 	AC_SUBST(OS_NETBSD)
 	THREAD_CFLAGS="-pthread"
 	LIBS="-pthread"
-	AC_CHECK_HEADERS([poll.h])
-	AC_DEFINE([POLL_NFDS_TYPE],[nfds_t],[type of second poll() argument])
 	;;
 windows)
 	AC_DEFINE(OS_WINDOWS, 1, [Windows backend])
 	AC_SUBST(OS_WINDOWS)
 	LIBS=""
 	LTLDFLAGS="${LTLDFLAGS} -avoid-version -Wl,--add-stdcall-alias"
-	AC_DEFINE([POLL_NFDS_TYPE],[unsigned int],[type of second poll() argument])
 	AC_DEFINE([WINVER], 0x0501, [Oldest Windows version supported])
 	;;
 haiku)
 	AC_DEFINE(OS_HAIKU, 1, [Haiku backend])
 	AC_SUBST(OS_HAIKU)
 	LIBS="${LIBS} -lbe"
-	AC_CHECK_HEADERS([poll.h])
-	AC_DEFINE([POLL_NFDS_TYPE],[nfds_t],[type of second poll() argument])
 	;;
 esac
 
@@ -190,11 +175,15 @@ AM_CONDITIONAL(OS_OPENBSD, test "x$backend" = xopenbsd)
 AM_CONDITIONAL(OS_NETBSD, test "x$backend" = xnetbsd)
 AM_CONDITIONAL(OS_WINDOWS, test "x$backend" = xwindows)
 AM_CONDITIONAL(OS_HAIKU, test "x$backend" = xhaiku)
-AM_CONDITIONAL(THREADS_POSIX, test "x$threads" = xposix)
+AM_CONDITIONAL(PLATFORM_POSIX, test "x$platform" = xposix)
 AM_CONDITIONAL(CREATE_IMPORT_LIB, test "x$create_import_lib" = "xyes")
 AM_CONDITIONAL(USE_UDEV, test "x$enable_udev" = xyes)
-if test "$threads" = posix; then
-	AC_DEFINE(THREADS_POSIX, 1, [Use POSIX Threads])
+if test "$platform" = posix; then
+	AC_DEFINE(PLATFORM_POSIX, 1, [Use POSIX platform abstraction])
+	AC_CHECK_TYPE([nfds_t],
+		[AC_DEFINE([POLL_NFDS_TYPE],[nfds_t],[type of second poll() argument])],
+		[AC_DEFINE([POLL_NFDS_TYPE],[unsigned int],[type of second poll() argument])],
+		[#include <poll.h>])
 fi
 
 # timerfd
@@ -219,7 +208,7 @@ if test "x$use_timerfd" = "xno"; then
 else
 	if test "x$timerfd_h" = "x1" -a "x$tfd_hdr_ok" = "xyes"; then
 		AC_MSG_RESULT([yes])
-		AC_DEFINE(USBI_TIMERFD_AVAILABLE, 1, [timerfd headers available])
+		AC_DEFINE(USBI_USING_TIMERFD, 1, [timerfd available and enabled])
 	else
 		AC_MSG_RESULT([no (header not available)])
 	fi

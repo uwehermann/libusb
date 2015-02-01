@@ -6,7 +6,7 @@ noinst_PROGRAMS = listdevs xusb fxload hotplugtest
 if HAVE_SIGACTION
 noinst_PROGRAMS += dpfp
 
-if THREADS_POSIX
+if PLATFORM_POSIX
 dpfp_threaded_CFLAGS = $(AM_CFLAGS)
 noinst_PROGRAMS += dpfp_threaded
 endif

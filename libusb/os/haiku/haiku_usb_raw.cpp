@@ -245,10 +245,6 @@ const struct usbi_os_backend haiku_usb_raw_backend = {
 
 	/*.clock_gettime =*/ haiku_clock_gettime,
 
-#ifdef USBI_TIMERFD_AVAILABLE
-	/*.get_timerfd_clockid =*/ NULL,
-#endif
-
 	/*.device_priv_size =*/ sizeof(USBDevice*),
 	/*.device_handle_priv_size =*/ sizeof(USBDeviceHandle*),
 	/*.transfer_priv_size =*/ sizeof(USBTransfer*),

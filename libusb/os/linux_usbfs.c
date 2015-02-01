@@ -1319,13 +1319,13 @@ static int op_open(struct libusb_device_handle *handle)
 			hpriv->caps |= USBFS_CAP_BULK_CONTINUATION;
 	}
 
-	return usbi_add_pollfd(HANDLE_CTX(handle), hpriv->fd, POLLOUT);
+	return usbi_add_event_source(HANDLE_CTX(handle), hpriv->fd, POLLOUT);
 }
 
 static void op_close(struct libusb_device_handle *dev_handle)
 {
 	int fd = _device_handle_priv(dev_handle)->fd;
-	usbi_remove_pollfd(HANDLE_CTX(dev_handle), fd);
+	usbi_remove_event_source(HANDLE_CTX(dev_handle), fd);
 	close(fd);
 }
 
@@ -2567,13 +2567,14 @@ static int reap_for_handle(struct libusb_device_handle *handle)
 }
 
 static int op_handle_events(struct libusb_context *ctx,
-	struct pollfd *fds, POLL_NFDS_TYPE nfds, int num_ready)
+	void *event_data, unsigned int cnt, int num_ready)
 {
+	struct pollfd *fds = (struct pollfd *)event_data;
 	int r;
 	unsigned int i = 0;
 
 	usbi_mutex_lock(&ctx->open_devs_lock);
-	for (i = 0; i < nfds && num_ready > 0; i++) {
+	for (i = 0; i < cnt && num_ready > 0; i++) {
 		struct pollfd *pollfd = &fds[i];
 		struct libusb_device_handle *handle;
 		struct linux_device_handle_priv *hpriv = NULL;
@@ -2595,7 +2596,7 @@ static int op_handle_events(struct libusb_context *ctx,
 		}
 
 		if (pollfd->revents & POLLERR) {
-			usbi_remove_pollfd(HANDLE_CTX(handle), hpriv->fd);
+			usbi_remove_event_source(HANDLE_CTX(handle), hpriv->fd);
 			usbi_handle_disconnect(handle);
 			/* device will still be marked as attached if hotplug monitor thread
 			 * hasn't processed remove event yet */
@@ -2633,14 +2634,6 @@ static int op_clock_gettime(int clk_id, struct timespec *tp)
 		return LIBUSB_ERROR_INVALID_PARAM;
   }
 }
-
-#ifdef USBI_TIMERFD_AVAILABLE
-static clockid_t op_get_timerfd_clockid(void)
-{
-	return monotonic_clkid;
-
-}
-#endif
 
 const struct usbi_os_backend linux_usbfs_backend = {
 	.name = "Linux usbfs",
@@ -2681,10 +2674,6 @@ const struct usbi_os_backend linux_usbfs_backend = {
 	.handle_events = op_handle_events,
 
 	.clock_gettime = op_clock_gettime,
-
-#ifdef USBI_TIMERFD_AVAILABLE
-	.get_timerfd_clockid = op_get_timerfd_clockid,
-#endif
 
 	.device_priv_size = sizeof(struct linux_device_priv),
 	.device_handle_priv_size = sizeof(struct linux_device_handle_priv),

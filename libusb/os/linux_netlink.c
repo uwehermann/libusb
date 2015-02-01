@@ -129,7 +129,7 @@ int linux_netlink_start_event_monitor(void)
 	/* TODO -- add authentication */
 	/* setsockopt(linux_netlink_socket, SOL_SOCKET, SO_PASSCRED, &one, sizeof(one)); */
 
-	ret = usbi_pipe(netlink_control_pipe);
+	ret = pipe(netlink_control_pipe);
 	if (ret) {
 		usbi_err(NULL, "could not create netlink control pipe");
 	        close(linux_netlink_socket);
@@ -159,7 +159,7 @@ int linux_netlink_stop_event_monitor(void)
 
 	/* Write some dummy data to the control pipe and
 	 * wait for the thread to exit */
-	r = usbi_write(netlink_control_pipe[1], &dummy, sizeof(dummy));
+	r = write(netlink_control_pipe[1], &dummy, sizeof(dummy));
 	if (r <= 0) {
 		usbi_warn(NULL, "netlink control pipe signal failed");
 	}
@@ -341,7 +341,7 @@ static void *linux_netlink_event_thread_main(void *arg)
 	while (poll(fds, 2, -1) >= 0) {
 		if (fds[0].revents & POLLIN) {
 			/* activity on control pipe, read the byte and exit */
-			r = usbi_read(netlink_control_pipe[0], &dummy, sizeof(dummy));
+			r = read(netlink_control_pipe[0], &dummy, sizeof(dummy));
 			if (r <= 0) {
 				usbi_warn(NULL, "netlink control pipe read failed");
 			}

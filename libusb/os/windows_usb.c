@@ -2109,7 +2109,7 @@ static int submit_bulk_transfer(struct usbi_transfer *itransfer)
 		return r;
 	}
 
-	usbi_add_pollfd(ctx, transfer_priv->pollable_fd.fd,
+	usbi_add_event_source(ctx, transfer_priv->pollable_fd.fd,
 		(short)(IS_XFERIN(transfer) ? POLLIN : POLLOUT));
 
 	return LIBUSB_SUCCESS;
@@ -2128,7 +2128,7 @@ static int submit_iso_transfer(struct usbi_transfer *itransfer)
 		return r;
 	}
 
-	usbi_add_pollfd(ctx, transfer_priv->pollable_fd.fd,
+	usbi_add_event_source(ctx, transfer_priv->pollable_fd.fd,
 		(short)(IS_XFERIN(transfer) ? POLLIN : POLLOUT));
 
 	return LIBUSB_SUCCESS;
@@ -2147,7 +2147,7 @@ static int submit_control_transfer(struct usbi_transfer *itransfer)
 		return r;
 	}
 
-	usbi_add_pollfd(ctx, transfer_priv->pollable_fd.fd, POLLIN);
+	usbi_add_event_source(ctx, transfer_priv->pollable_fd.fd, POLLIN);
 
 	return LIBUSB_SUCCESS;
 
@@ -2316,7 +2316,7 @@ static int windows_handle_events(struct libusb_context *ctx, struct pollfd *fds,
 			} else {
 				io_result = GetLastError();
 			}
-			usbi_remove_pollfd(ctx, transfer_priv->pollable_fd.fd);
+			usbi_remove_event_source(ctx, transfer_priv->pollable_fd.fd);
 			// let handle_callback free the event using the transfer wfd
 			// If you don't use the transfer wfd, you run a risk of trying to free a
 			// newly allocated wfd that took the place of the one from the transfer.
@@ -2480,9 +2480,6 @@ const struct usbi_os_backend windows_backend = {
 	NULL,				/* handle_transfer_completion() */
 
 	windows_clock_gettime,
-#if defined(USBI_TIMERFD_AVAILABLE)
-	NULL,
-#endif
 	sizeof(struct windows_device_priv),
 	sizeof(struct windows_device_handle_priv),
 	sizeof(struct windows_transfer_priv),
@@ -3294,7 +3291,7 @@ static int winusbx_reset_device(int sub_api, struct libusb_device_handle *dev_ha
 		for (wfd = handle_to_winfd(winusb_handle); wfd.fd > 0;)
 		{
 			// Cancel any pollable I/O
-			usbi_remove_pollfd(ctx, wfd.fd);
+			usbi_remove_event_source(ctx, wfd.fd);
 			usbi_free_fd(&wfd);
 			wfd = handle_to_winfd(winusb_handle);
 		}

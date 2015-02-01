@@ -584,7 +584,7 @@ static int wince_submit_control_or_bulk_transfer(struct usbi_transfer *itransfer
 		wince_clear_transfer_priv(itransfer);
 		return libusbErr;
 	}
-	usbi_add_pollfd(ctx, transfer_priv->pollable_fd.fd, direction_in ? POLLIN : POLLOUT);
+	usbi_add_event_source(ctx, transfer_priv->pollable_fd.fd, direction_in ? POLLIN : POLLOUT);
 
 	return LIBUSB_SUCCESS;
 }
@@ -766,7 +766,7 @@ static int wince_handle_events(
 		if (found && HasOverlappedIoCompleted(transfer_priv->pollable_fd.overlapped)) {
 			io_result = (DWORD)transfer_priv->pollable_fd.overlapped->Internal;
 			io_size = (DWORD)transfer_priv->pollable_fd.overlapped->InternalHigh;
-			usbi_remove_pollfd(ctx, transfer_priv->pollable_fd.fd);
+			usbi_remove_event_source(ctx, transfer_priv->pollable_fd.fd);
 			// let handle_callback free the event using the transfer wfd
 			// If you don't use the transfer wfd, you run a risk of trying to free a
 			// newly allocated wfd that took the place of the one from the transfer.

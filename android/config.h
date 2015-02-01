@@ -41,8 +41,8 @@
 /* type of second poll() argument */
 #define POLL_NFDS_TYPE nfds_t
 
-/* Use POSIX Threads */
-#define THREADS_POSIX 1
+/* Use POSIX platform abstraction */
+#define PLATFORM_POSIX 1
 
 /* Default visibility */
 #define DEFAULT_VISIBILITY __attribute__((visibility("default")))

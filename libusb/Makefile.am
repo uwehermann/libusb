@@ -4,19 +4,18 @@ AUTOMAKE_OPTIONS = subdir-objects
 
 lib_LTLIBRARIES = libusb-1.0.la
 
-POSIX_POLL_SRC = os/poll_posix.c
 LINUX_USBFS_SRC = os/linux_usbfs.c
 DARWIN_USB_SRC = os/darwin_usb.c
 OPENBSD_USB_SRC = os/openbsd_usb.c
 NETBSD_USB_SRC = os/netbsd_usb.c
-WINDOWS_USB_SRC = os/poll_windows.c os/windows_usb.c libusb-1.0.rc libusb-1.0.def
+WINDOWS_USB_SRC = os/windows_usb.c libusb-1.0.rc libusb-1.0.def
 WINCE_USB_SRC = os/wince_usb.c os/wince_usb.h
 
 DIST_SUBDIRS = 
 
 EXTRA_DIST = $(LINUX_USBFS_SRC) $(DARWIN_USB_SRC) $(OPENBSD_USB_SRC) \
 	$(NETBSD_USB_SRC) $(WINDOWS_USB_SRC) $(WINCE_USB_SRC) \
-	$(POSIX_POLL_SRC) \
+	os/events_posix.c os/events_windows.c \
 	os/threads_posix.c os/threads_windows.c \
 	os/linux_udev.c os/linux_netlink.c
 
@@ -27,30 +26,28 @@ dist-hook:
 if OS_LINUX
 
 if USE_UDEV
-OS_SRC = $(LINUX_USBFS_SRC) $(POSIX_POLL_SRC) \
-	os/linux_udev.c
+OS_SRC = $(LINUX_USBFS_SRC) os/linux_udev.c
 else
-OS_SRC = $(LINUX_USBFS_SRC) $(POSIX_POLL_SRC) \
-	os/linux_netlink.c
+OS_SRC = $(LINUX_USBFS_SRC) os/linux_netlink.c
 endif
 
 endif
 
 if OS_DARWIN
-OS_SRC = $(DARWIN_USB_SRC) $(POSIX_POLL_SRC)
+OS_SRC = $(DARWIN_USB_SRC)
 AM_CFLAGS_EXT = -no-cpp-precomp
 endif
 
 if OS_OPENBSD
-OS_SRC = $(OPENBSD_USB_SRC) $(POSIX_POLL_SRC)
+OS_SRC = $(OPENBSD_USB_SRC)
 endif
 
 if OS_NETBSD
-OS_SRC = $(NETBSD_USB_SRC) $(POSIX_POLL_SRC)
+OS_SRC = $(NETBSD_USB_SRC)
 endif
 
 if OS_HAIKU
-OS_SRC = $(POSIX_POLL_SRC)
+OS_SRC = 
 SUBDIRS = os/haiku
 endif
 
@@ -69,18 +66,19 @@ if CREATE_IMPORT_LIB
 	$(AM_V_GEN)$(DLLTOOL) $(DLLTOOLFLAGS) --kill-at --input-def $(srcdir)/libusb-1.0.def --dllname $@ --output-lib .libs/$@.a
 endif
 
-if THREADS_POSIX
-THREADS_SRC = os/threads_posix.h os/threads_posix.c
+if PLATFORM_POSIX
+PLATFORM_SRC = os/events_posix.c os/threads_posix.c
 else
-THREADS_SRC = os/threads_windows.h os/threads_windows.c
+PLATFORM_SRC = os/events_windows.c os/threads_windows.c
 endif
 
 libusb_1_0_la_CFLAGS = $(AM_CFLAGS)
 libusb_1_0_la_LDFLAGS = $(LTLDFLAGS)
 libusb_1_0_la_SOURCES = libusbi.h core.c descriptor.c io.c strerror.c sync.c \
 	os/linux_usbfs.h os/darwin_usb.h os/windows_usb.h os/windows_common.h \
-	hotplug.h hotplug.c $(THREADS_SRC) $(OS_SRC) \
-	os/poll_posix.h os/poll_windows.h
+	hotplug.h hotplug.c $(PLATFORM_SRC) $(OS_SRC) \
+	os/events_posix.h os/events_windows.h \
+	os/threads_posix.h os/threads_windows.h
 
 if OS_HAIKU
 libusb_1_0_la_LIBADD = os/haiku/libhaikuusb.la
