@@ -221,11 +221,95 @@ int usbi_destroy_timer(usbi_timer_t timer)
 
 int usbi_alloc_event_data(struct libusb_context *ctx)
 {
-	return LIBUSB_ERROR_OTHER;
+	struct usbi_event_source *event_source;
+	struct pollfd *fds;
+	int i = 0;
+
+	if (ctx->event_data) {
+		free(ctx->event_data);
+		ctx->event_data = NULL;
+	}
+
+	fds = calloc(ctx->event_sources_cnt, sizeof(struct pollfd));
+	if (!fds)
+		return LIBUSB_ERROR_NO_MEM;
+
+	list_for_each_entry(event_source, &ctx->event_sources, list, struct usbi_event_source) {
+		struct libusb_pollfd *pollfd = &event_source->pollfd;
+		fds[i].fd = pollfd->fd;
+		fds[i].events = pollfd->events;
+		i++;
+	}
+
+	ctx->event_data = fds;
+	return 0;
 }
 
 int usbi_handle_events(struct libusb_context *ctx, void *event_data, unsigned int cnt,
 	unsigned int internal_cnt, int timeout_ms)
 {
-	return LIBUSB_ERROR_OTHER;
+	struct pollfd *fds = (struct pollfd *)event_data;
+	POLL_NFDS_TYPE nfds = (POLL_NFDS_TYPE)cnt;
+	int special_event;
+	int r;
+
+redo_poll:
+	usbi_dbg("poll() %u fds with timeout in %dms", cnt, timeout_ms);
+	r = poll(fds, nfds, timeout_ms);
+	usbi_dbg("poll() returned %d", r);
+	if (r == 0)
+		return usbi_using_timer(ctx) ? 0 : LIBUSB_ERROR_TIMEOUT;
+	else if (r == -1 && errno == EINTR)
+		return LIBUSB_ERROR_INTERRUPTED;
+	else if (r < 0) {
+		usbi_err(ctx, "poll failed %d err=%d", r, errno);
+		return LIBUSB_ERROR_IO;
+	}
+
+	special_event = 0;
+
+	/* fds[0] is always the event */
+	if (fds[0].revents) {
+		int ret = usbi_handle_event_trigger(ctx);
+		if (ret < 0) {
+			/* return error code */
+			r = ret;
+			goto handled;
+		}
+		else if (ret) {
+			/* special event occurred */
+			special_event = 1;
+		}
+
+		if (0 == --r)
+			goto handled;
+	}
+
+	/* on timer configurations, fds[1] is the timer */
+	if (usbi_using_timer(ctx) && fds[1].revents) {
+		/* timer indicates that a timeout has expired */
+		int ret = usbi_handle_timer_trigger(ctx);
+		if (ret < 0) {
+			/* return error code */
+			r = ret;
+			goto handled;
+		}
+
+		special_event = 1;
+
+		if (0 == --r)
+			goto handled;
+	}
+
+	r = usbi_backend->handle_events(ctx, fds + internal_cnt, cnt - internal_cnt, r);
+	if (r)
+		usbi_err(ctx, "backend handle_events failed with error %d", r);
+
+handled:
+	if (r == 0 && special_event) {
+		timeout_ms = 0;
+		goto redo_poll;
+	}
+
+	return r;
 }
