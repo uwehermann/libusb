@@ -292,9 +292,11 @@ static inline struct windows_device_handle_priv *_device_handle_priv(
 	return (struct windows_device_handle_priv *) handle->os_priv;
 }
 
-// used for async polling functions
 struct windows_transfer_priv {
-	struct winfd pollable_fd;
+	HANDLE handle;
+	HANDLE original_handle;
+	DWORD thread_id;
+	OVERLAPPED overlapped;
 	uint8_t interface_number;
 	uint8_t *hid_buffer; // 1 byte extended data buffer, required for HID
 	uint8_t *hid_dest;   // transfer buffer destination, required for HID

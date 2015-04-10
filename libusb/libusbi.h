@@ -166,6 +166,18 @@ static inline void *usbi_reallocf(void *ptr, size_t size)
         } while (0)
 #endif
 
+#if !defined(timersub)
+#define timersub(a, b, result)						\
+	do {								\
+		(result)->tv_sec = (a)->tv_sec - (b)->tv_sec;		\
+		(result)->tv_usec = (a)->tv_usec - (b)->tv_usec;	\
+		if ((result)->tv_usec < 0) {				\
+			--(result)->tv_sec;				\
+			(result)->tv_usec += 1000000;			\
+			}						\
+	} while (0)
+#endif
+
 void usbi_log(struct libusb_context *ctx, enum libusb_log_level level,
 	const char *function, const char *format, ...);
 

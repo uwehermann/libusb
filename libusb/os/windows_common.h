@@ -62,6 +62,33 @@
 #define TIMER_REQUEST_RETRY_MS      100
 #define MAX_TIMER_SEMAPHORES        128
 
+// Handle synchronous completion through the overlapped structure
+#if !defined(STATUS_REPARSE)	// reuse the REPARSE status code
+#define STATUS_REPARSE ((LONG)0x00000104L)
+#endif
+#define STATUS_COMPLETED_SYNCHRONOUSLY	STATUS_REPARSE
+#if defined(_WIN32_WCE)
+// WinCE doesn't have a HasOverlappedIoCompleted() macro, so attempt to emulate it
+#define HasOverlappedIoCompleted(lpOverlapped) (((DWORD)(lpOverlapped)->Internal) != STATUS_PENDING)
+#endif
+#define HasOverlappedIoCompletedSync(lpOverlapped)	(((DWORD)(lpOverlapped)->Internal) == STATUS_COMPLETED_SYNCHRONOUSLY)
+
+#define DUMMY_HANDLE ((HANDLE)(LONG_PTR)-2)
+
+/* Windows versions */
+enum windows_version {
+	WINDOWS_CE = -2,
+	WINDOWS_UNDEFINED = -1,
+	WINDOWS_UNSUPPORTED = 0,
+	WINDOWS_XP = 0x51,
+	WINDOWS_2003 = 0x52,	// Also XP x64
+	WINDOWS_VISTA = 0x60,
+	WINDOWS_7 = 0x61,
+	WINDOWS_8 = 0x62,
+	WINDOWS_8_1_OR_LATER = 0x63,
+	WINDOWS_MAX
+};
+extern int windows_version;
 
 /*
  * API macros - from libusb-win32 1.x
