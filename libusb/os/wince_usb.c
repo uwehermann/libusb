@@ -179,9 +179,6 @@ static int wince_init(struct libusb_context *ctx)
 	// NB: concurrent usage supposes that init calls are equally balanced with
 	// exit calls. If init is called more than exit, we will not exit properly
 	if ( ++concurrent_usage == 0 ) {	// First init?
-		// Initialize pollable file descriptors
-		init_polling();
-
 		// Load DLL imports
 		if (init_dllimports() != LIBUSB_SUCCESS) {
 			usbi_err(ctx, "could not resolve DLL functions");
@@ -249,8 +246,6 @@ static void wince_exit(void)
 
 	// Only works if exits and inits are balanced exactly
 	if (--concurrent_usage < 0) {	// Last exit
-		exit_polling();
-
 		if (driver_handle != INVALID_HANDLE_VALUE) {
 			UkwCloseDriver(driver_handle);
 			driver_handle = INVALID_HANDLE_VALUE;
@@ -512,11 +507,12 @@ static void wince_destroy_device(struct libusb_device *dev)
 static void wince_clear_transfer_priv(struct usbi_transfer *itransfer)
 {
 	struct wince_transfer_priv *transfer_priv = (struct wince_transfer_priv*)usbi_transfer_get_os_priv(itransfer);
-	struct winfd wfd = fd_to_winfd(transfer_priv->pollable_fd.fd);
 	// No need to cancel transfer as it is either complete or abandoned
-	wfd.itransfer = NULL;
-	CloseHandle(wfd.handle);
-	usbi_free_fd(&transfer_priv->pollable_fd);
+	if (transfer_priv->overlapped.hEvent != NULL) {
+		usbi_remove_event_source(ITRANSFER_CTX(itransfer), transfer_priv->overlapped.hEvent);
+		CloseHandle(transfer_priv->overlapped.hEvent);
+		transfer_priv->overlapped.hEvent = NULL;
+	}
 }
 
 static int wince_cancel_transfer(struct usbi_transfer *itransfer)
@@ -525,7 +521,7 @@ static int wince_cancel_transfer(struct usbi_transfer *itransfer)
 	struct wince_device_priv *priv = _device_priv(transfer->dev_handle->dev);
 	struct wince_transfer_priv *transfer_priv = (struct wince_transfer_priv*)usbi_transfer_get_os_priv(itransfer);
 
-	if (!UkwCancelTransfer(priv->dev, transfer_priv->pollable_fd.overlapped, UKW_TF_NO_WAIT)) {
+	if (!UkwCancelTransfer(priv->dev, &transfer_priv->overlapped, UKW_TF_NO_WAIT)) {
 		return translate_driver_error(GetLastError());
 	}
 	return LIBUSB_SUCCESS;
@@ -537,14 +533,12 @@ static int wince_submit_control_or_bulk_transfer(struct usbi_transfer *itransfer
 	struct libusb_context *ctx = DEVICE_CTX(transfer->dev_handle->dev);
 	struct wince_transfer_priv *transfer_priv = (struct wince_transfer_priv*)usbi_transfer_get_os_priv(itransfer);
 	struct wince_device_priv *priv = _device_priv(transfer->dev_handle->dev);
+	int r;
 	BOOL direction_in, ret;
-	struct winfd wfd;
 	DWORD flags;
-	HANDLE eventHandle;
 	PUKW_CONTROL_HEADER setup = NULL;
 	const BOOL control_transfer = transfer->type == LIBUSB_TRANSFER_TYPE_CONTROL;
 
-	transfer_priv->pollable_fd = INVALID_WINFD;
 	if (control_transfer) {
 		setup = (PUKW_CONTROL_HEADER) transfer->buffer;
 		direction_in = setup->bmRequestType & LIBUSB_ENDPOINT_IN;
@@ -554,28 +548,27 @@ static int wince_submit_control_or_bulk_transfer(struct usbi_transfer *itransfer
 	flags = direction_in ? UKW_TF_IN_TRANSFER : UKW_TF_OUT_TRANSFER;
 	flags |= UKW_TF_SHORT_TRANSFER_OK;
 
-	eventHandle = CreateEvent(NULL, FALSE, FALSE, NULL);
-	if (eventHandle == NULL) {
-		usbi_err(ctx, "Failed to create event for async transfer");
+	memset(&transfer_priv->overlapped, 0, sizeof(transfer_priv->overlapped));
+	transfer_priv->overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	if (transfer_priv->overlapped.hEvent == NULL) {
 		return LIBUSB_ERROR_NO_MEM;
 	}
-
-	wfd = usbi_create_fd(eventHandle, direction_in ? RW_READ : RW_WRITE, itransfer, &wince_cancel_transfer);
-	if (wfd.fd < 0) {
-		CloseHandle(eventHandle);
-		return LIBUSB_ERROR_NO_MEM;
+	r = usbi_add_event_source(ctx, transfer_priv->overlapped.hEvent, 0);
+	if (r) {
+		CloseHandle(transfer_priv->overlapped.hEvent);
+		transfer_priv->overlapped.hEvent = NULL;
+		return r;
 	}
 
-	transfer_priv->pollable_fd = wfd;
 	if (control_transfer) {
 		// Split out control setup header and data buffer
 		DWORD bufLen = transfer->length - sizeof(UKW_CONTROL_HEADER);
 		PVOID buf = (PVOID) &transfer->buffer[sizeof(UKW_CONTROL_HEADER)];
 
-		ret = UkwIssueControlTransfer(priv->dev, flags, setup, buf, bufLen, &transfer->actual_length, wfd.overlapped);
+		ret = UkwIssueControlTransfer(priv->dev, flags, setup, buf, bufLen, &transfer->actual_length, &transfer_priv->overlapped);
 	} else {
 		ret = UkwIssueBulkTransfer(priv->dev, flags, transfer->endpoint, transfer->buffer,
-			transfer->length, &transfer->actual_length, wfd.overlapped);
+			transfer->length, &transfer->actual_length, &transfer_priv->overlapped);
 	}
 	if (!ret) {
 		int libusbErr = translate_driver_error(GetLastError());
@@ -584,7 +577,6 @@ static int wince_submit_control_or_bulk_transfer(struct usbi_transfer *itransfer
 		wince_clear_transfer_priv(itransfer);
 		return libusbErr;
 	}
-	usbi_add_event_source(ctx, transfer_priv->pollable_fd.fd, direction_in ? POLLIN : POLLOUT);
 
 	return LIBUSB_SUCCESS;
 }
@@ -731,57 +723,44 @@ static void wince_handle_callback(
 }
 
 static int wince_handle_events(
-	struct libusb_context *ctx,
-	struct pollfd *fds, POLL_NFDS_TYPE nfds, int num_ready)
+	struct libusb_context *ctx, void *event_data,
+	unsigned int cnt, int num_ready)
 {
-	struct wince_transfer_priv* transfer_priv = NULL;
-	POLL_NFDS_TYPE i = 0;
-	BOOL found = FALSE;
+	HANDLE *handles = (HANDLE *)event_data;
 	struct usbi_transfer *transfer;
+	struct wince_transfer_priv* transfer_priv;
+	unsigned int i;
+	BOOL found;
 	DWORD io_size, io_result;
 
 	usbi_mutex_lock(&ctx->open_devs_lock);
-	for (i = 0; i < nfds && num_ready > 0; i++) {
-
-		usbi_dbg("checking fd %d with revents = %04x", fds[i].fd, fds[i].revents);
-
-		if (!fds[i].revents) {
-			continue;
-		}
-
-		num_ready--;
-
-		// Because a Windows OVERLAPPED is used for poll emulation,
-		// a pollable fd is created and stored with each transfer
+	for (i = 0; i < cnt; i++) {
+		transfer_priv = NULL;
+		found = FALSE;
 		usbi_mutex_lock(&ctx->flying_transfers_lock);
 		list_for_each_entry(transfer, &ctx->flying_transfers, list, struct usbi_transfer) {
 			transfer_priv = usbi_transfer_get_os_priv(transfer);
-			if (transfer_priv->pollable_fd.fd == fds[i].fd) {
+			if (transfer_priv->overlapped.hEvent == handles[i]) {
 				found = TRUE;
 				break;
 			}
 		}
 		usbi_mutex_unlock(&ctx->flying_transfers_lock);
 
-		if (found && HasOverlappedIoCompleted(transfer_priv->pollable_fd.overlapped)) {
-			io_result = (DWORD)transfer_priv->pollable_fd.overlapped->Internal;
-			io_size = (DWORD)transfer_priv->pollable_fd.overlapped->InternalHigh;
-			usbi_remove_event_source(ctx, transfer_priv->pollable_fd.fd);
-			// let handle_callback free the event using the transfer wfd
-			// If you don't use the transfer wfd, you run a risk of trying to free a
-			// newly allocated wfd that took the place of the one from the transfer.
+		if (found && HasOverlappedIoCompleted(&transfer_priv->overlapped)) {
+			io_result = (DWORD)transfer_priv->overlapped.Internal;
+			io_size = (DWORD)transfer_priv->overlapped.InternalHigh;
 			wince_handle_callback(transfer, io_result, io_size);
 		} else if (found) {
-			usbi_err(ctx, "matching transfer for fd %x has not completed", fds[i]);
-			usbi_mutex_unlock(&ctx->open_devs_lock);
-			return LIBUSB_ERROR_OTHER;
+			usbi_dbg("matching transfer for HANDLE %x has not completed", handles[i]);
+			continue;
 		} else {
-			usbi_err(ctx, "could not find a matching transfer for fd %x", fds[i]);
-			usbi_mutex_unlock(&ctx->open_devs_lock);
-			return LIBUSB_ERROR_NOT_FOUND;
+			// This can occur if the transfer overlapped event was added to the event
+			// sources list but transfer submission failed and it hasn't been removed yet
+			usbi_err(ctx, "could not find a matching transfer for HANDLE %x", handles[i]);
+			continue;
 		}
 	}
-
 	usbi_mutex_unlock(&ctx->open_devs_lock);
 	return LIBUSB_SUCCESS;
 }

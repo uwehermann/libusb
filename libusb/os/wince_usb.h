@@ -26,7 +26,6 @@
 #include "windows_common.h"
 
 #include <windows.h>
-#include "poll_windows.h"
 
 #define MAX_DEVICE_COUNT            256
 
@@ -125,7 +124,7 @@ struct wince_device_handle_priv {
 };
 
 struct wince_transfer_priv {
-	struct winfd pollable_fd;
+	OVERLAPPED overlapped;
 	uint8_t interface_number;
 };
 
