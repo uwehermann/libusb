@@ -1157,7 +1157,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\libusb\os\poll_windows.c"
+				RelativePath="..\libusb\os\events_windows.c"
 				>
 			</File>
 			<File
@@ -1203,7 +1203,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\libusb\os\poll_windows.h"
+				RelativePath="..\libusb\os\events_windows.h"
 				>
 			</File>
 			<File

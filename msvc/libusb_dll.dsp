@@ -97,12 +97,15 @@ SOURCE=..\libusb\core.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\libusb\os\darwin_usb.c
-# PROP Exclude_From_Build 1
+SOURCE=..\libusb\descriptor.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\libusb\descriptor.c
+SOURCE=..\libusb\os\events_windows.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\libusb\hotplug.c
 # End Source File
 # Begin Source File
 
@@ -110,20 +113,7 @@ SOURCE=..\libusb\io.c
 # End Source File
 # Begin Source File
 
-SOURCE="..\libusb\libusb-1.0.rc"
-# End Source File
-# Begin Source File
-
-SOURCE="..\libusb\libusb-1.0.def"
-# End Source File
-# Begin Source File
-
-SOURCE=..\libusb\os\linux_usbfs.c
-# PROP Exclude_From_Build 1
-# End Source File
-# Begin Source File
-
-SOURCE=..\libusb\os\poll_windows.c
+SOURCE=..\libusb\strerror.c
 # End Source File
 # Begin Source File
 
@@ -147,7 +137,11 @@ SOURCE=.\config.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\libusb\os\darwin_usb.h
+SOURCE=..\libusb\os\events_windows.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\libusb\hotplug.h
 # End Source File
 # Begin Source File
 
@@ -159,36 +153,35 @@ SOURCE=..\libusb\libusbi.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\libusb\os\linux_usbfs.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\libusb\os\poll_posix.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\libusb\os\poll_windows.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\libusb\os\threads_posix.h
-# End Source File
-# Begin Source File
-
 SOURCE=..\libusb\os\threads_windows.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\libusb\os\windows_usb.h
+SOURCE=..\libusb\version.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\libusb\version_nano.h
 # End Source File
 # Begin Source File
 
 SOURCE=..\libusb\os\windows_common.h
 # End Source File
 # End Group
+
+SOURCE=..\libusb\os\windows_usb.h
+# End Source File
 # Begin Group "Resource Files"
 
 # PROP Default_Filter "ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe"
+# Begin Source File
+
+SOURCE="..\libusb\libusb-1.0.rc"
+# End Source File
+# Begin Source File
+
+SOURCE="..\libusb\libusb-1.0.def"
+# End Source File
 # End Group
 # End Target
 # End Project

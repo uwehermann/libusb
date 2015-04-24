@@ -28,14 +28,15 @@
 /* Uncomment to enabling logging to system log */
 // #define USE_SYSTEM_LOGGING_FACILITY
 
-/* type of second poll() argument */
-#define POLL_NFDS_TYPE unsigned int
-
 /* Windows/WinCE backend */
 #if defined(_WIN32_WCE)
 #define OS_WINCE 1
 #define HAVE_MISSING_H
 #else
+/* Support Windows XP and later */
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0501
+#endif
 #define OS_WINDOWS 1
 #define HAVE_SIGNAL_H 1
 #define HAVE_SYS_TYPES_H 1
